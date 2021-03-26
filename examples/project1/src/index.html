@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Welcome to Wry Standalone!</title>
+  </head>
+  <body>
+    <script>
+      const test = [1,2,3].filter(n => n > 1);
+      console.log(test);
+    </script>
+    <script>
+      let fullscreen = false;
+      async function toggleFullScreen() {
+          await rpc.call('fullscreen', !fullscreen);
+          fullscreen = !fullscreen;
+      }
+      async function getAsyncRpcResult() {
+          const reply = await rpc.call('send-parameters', {'message': 'WRY'});
+          const result = document.getElementById('rpc-result');
+          result.innerText = reply;
+      }
+      </script>
+      
+    <h1>Welcome to Wry Standalone!</h1>
+    <a href="test.html">goto test</a>
+    <img src="./img.jpg" />
+    <div><button onclick="toggleFullScreen();">Toggle fullscreen</button></div>
+      <div><button onclick="getAsyncRpcResult();">Send parameters</button></div>
+      <div id="rpc-result"></div>
+  </body>
+</html>

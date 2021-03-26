@@ -1,0 +1,21 @@
+[package]
+name = "wry-standalone"
+version = "0.1.0"
+authors = ["David Lemarier <david@lemarier.ca>"]
+edition = "2018"
+
+[dependencies]
+wry = "0.6"
+clap = "2.33"
+serde = { version = "1.0", features = [ "derive" ] }
+serde_json = "1.0"
+anyhow = "1.0"
+thiserror = "1"
+walkdir = "2"
+phf = { version = "0.8", features = ["macros"] }
+zstd = "0.6"
+
+
+[[bin]]
+name = "wry"
+path = "src/main.rs"
