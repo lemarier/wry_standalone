@@ -2,18 +2,60 @@ pub use anyhow::Result;
 use clap::{App, Arg};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::io::prelude::*;
-use wry::{Application, Attributes, CustomProtocol, RpcRequest, RpcResponse, WindowProxy};
+use std::{cell::RefCell, collections::HashMap, io::prelude::*};
+
+use deno_core::error::AnyError;
+use deno_core::json_op_sync;
+use deno_core::FsModuleLoader;
+use deno_runtime::permissions::Permissions;
+use deno_runtime::worker::MainWorker;
+use deno_runtime::worker::WorkerOptions;
+use std::rc::Rc;
+use std::sync::Arc;
+
+use deno_core::error::anyhow;
+use wry::webview::{RpcRequest, WebView, WebViewBuilder};
+
+use winit::platform::run_return::EventLoopExtRunReturn;
+use winit::{
+    event_loop::{ControlFlow, EventLoop},
+    window::Window,
+};
 
 mod embed_assets;
+mod event;
+mod helpers;
 mod standalone;
+
+use serde_json::json;
+
+use event::Event;
+use helpers::WebViewStatus;
+
+thread_local! {
+  static INDEX: RefCell<u64> = RefCell::new(0);
+  static EVENT_LOOP: RefCell<EventLoop<()>> = RefCell::new(EventLoop::new());
+  static WEBVIEW_MAP: RefCell<HashMap<u64, WebView>> = RefCell::new(HashMap::new());
+  static WEBVIEW_STATUS: RefCell<HashMap<u64, WebViewStatus>> = RefCell::new(HashMap::new());
+  static STACK_MAP: RefCell<HashMap<u64, Vec<event::Event>>> = RefCell::new(HashMap::new());
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 struct MessageParameters {
     message: String,
 }
 
-fn main() -> Result<()> {
+#[derive(Deserialize, Serialize)]
+struct ResourceId {
+    rid: u32,
+}
+
+fn get_error_class_name(e: &AnyError) -> &'static str {
+    deno_runtime::errors::get_error_class_name(e).unwrap_or("Error")
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
     let standalone_res = match standalone::extract_standalone() {
         Ok(Some((metadata, assets))) => standalone::run(assets, metadata),
         Ok(None) => Ok(()),
@@ -23,70 +65,30 @@ fn main() -> Result<()> {
         std::process::exit(1);
     }
 
-    let mut app = Application::new()?;
     let matches = App::new("wry")
         .subcommand(
             App::new("run")
                 .about("Run application")
-                .arg(Arg::with_name("html-file").required(true)),
+                .arg(Arg::with_name("js-file").required(true)),
         )
         .subcommand(
             App::new("compile")
                 .about("Compile application binary")
-                .arg(Arg::with_name("html-file").required(true)),
+                .arg(Arg::with_name("js-file").required(true)),
         )
         .get_matches();
 
     if let Some(run_matches) = matches.subcommand_matches("run") {
         // we should have a path like
         // ./examples/project1/src/index.html
-        let root_entry_point = std::path::PathBuf::from(run_matches.value_of("html-file").unwrap());
-
-        // get file name like index.html
-        let root_file_name = root_entry_point.file_name().unwrap().to_str().unwrap();
+        let root_entry_point = std::path::PathBuf::from(run_matches.value_of("js-file").unwrap());
+        let root_entry_point_clone = root_entry_point.clone();
 
         // our project path source should be
         // ./examples/project1/src/
         let root_path = std::fs::canonicalize(root_entry_point.clone().parent().unwrap())?;
 
-        let attributes = Attributes {
-            url: Some(format!("wry://{}", root_file_name)),
-            title: String::from("Hello World!"),
-            ..Default::default()
-        };
-
-        let handler = Box::new(|proxy: WindowProxy, mut req: RpcRequest| {
-            let mut response = None;
-            println!("{:?}", req.method);
-            if &req.method == "fullscreen" {
-                if let Some(params) = req.params.take() {
-                    if let Ok(mut args) = serde_json::from_value::<Vec<bool>>(params) {
-                        if !args.is_empty() {
-                            let flag = args.swap_remove(0);
-                            // NOTE: in the real world we need to reply with an error
-                            let _ = proxy.set_fullscreen(flag);
-                        };
-                        response = Some(RpcResponse::new_result(req.id.take(), None));
-                    }
-                }
-            } else if &req.method == "send-parameters" {
-                if let Some(params) = req.params.take() {
-                    if let Ok(mut args) = serde_json::from_value::<Vec<MessageParameters>>(params) {
-                        let result = if !args.is_empty() {
-                            let msg = args.swap_remove(0);
-                            Some(Value::String(format!("Hello, {}!", msg.message)))
-                        } else {
-                            // NOTE: in the real-world we should send an error response here!
-                            None
-                        };
-                        // Must always send a response as this is a `call()`
-                        response = Some(RpcResponse::new_result(req.id.take(), result));
-                    }
-                }
-            }
-
-            response
-        });
+        let module_loader = Rc::new(FsModuleLoader);
 
         fn load_local_file(
             file: &str,
@@ -100,28 +102,204 @@ fn main() -> Result<()> {
             Ok(buffer)
         }
 
-        let custom_protocol = CustomProtocol {
-            name: "wry".into(),
-            handler: Box::new(move |a| {
-                load_local_file(
-                    &a.replace("wry://", ""),
-                    root_entry_point.file_name().unwrap().to_str().unwrap(),
-                    root_path.clone(),
-                )
-                .map_err(|_| wry::Error::InitScriptError)
-            }),
+        let create_web_worker_cb = Arc::new(|_| {
+            todo!("Web workers are not supported");
+        });
+
+        let options = WorkerOptions {
+            apply_source_maps: false,
+            args: vec![],
+            debug_flag: false,
+            unstable: false,
+            ca_data: None,
+            user_agent: "hello_runtime".to_string(),
+            seed: None,
+            js_error_create_fn: None,
+            create_web_worker_cb,
+            attach_inspector: false,
+            maybe_inspector_server: None,
+            should_break_on_first_statement: false,
+            module_loader,
+            runtime_version: "x".to_string(),
+            ts_version: "x".to_string(),
+            no_color: false,
+            get_error_class_fn: Some(&get_error_class_name),
+            location: None,
         };
 
-        app.add_window_with_configs(attributes, Some(handler), Some(custom_protocol), None)?;
-        app.run();
+        let main_module = deno_core::resolve_path(&root_entry_point_clone.to_string_lossy())?;
+        let permissions = Permissions::allow_all();
+
+        let mut worker = MainWorker::from_options(main_module.clone(), permissions, &options);
+
+        worker.js_runtime.register_op(
+            "wry_step",
+            json_op_sync(move |_state, json: Value, _zero_copy| {
+                let id = json["id"].as_u64().unwrap();
+                STACK_MAP.with(|cell| {
+                    let mut stack_map = cell.borrow_mut();
+                    if let Some(stack) = stack_map.get_mut(&id) {
+                        let ret = stack.clone();
+                        stack.clear();
+                        Ok(json!(ret))
+                    } else {
+                        Err(anyhow!("Could not find stack with id: {}", id))
+                    }
+                })
+            }),
+        );
+
+        worker.js_runtime.register_op("wry_loop", json_op_sync(move |_state, json: Value, _zero_copy| {
+              let id = json["id"].as_u64().unwrap();
+              let mut should_stop_loop = false;
+              EVENT_LOOP.with(|cell| {
+                  let event_loop = &mut *cell.borrow_mut();
+                  event_loop.run_return(|event, _, control_flow| {
+                      *control_flow = ControlFlow::Exit;
+
+                      WEBVIEW_MAP.with(|cell| {
+                          let webview_map = cell.borrow();
+
+                          if let Some(webview) = webview_map.get(&id) {
+                              match event {
+                                  winit::event::Event::WindowEvent {
+                                      event: winit::event::WindowEvent::CloseRequested,
+                                      ..
+                                  } => {
+                                      should_stop_loop = true;
+                                  }
+                                  winit::event::Event::WindowEvent {
+                                      event: winit::event::WindowEvent::Resized(_),
+                                      ..
+                                  } => {
+                                      webview.resize().unwrap();
+                                  }
+                                  winit::event::Event::MainEventsCleared => {
+                                      webview.window().request_redraw();
+                                  }
+                                  winit::event::Event::RedrawRequested(_) => {}
+                                  _ => (),
+                              };
+
+                              // set this webview as WindowCreated if needed
+                              WEBVIEW_STATUS.with(|cell| {
+                                  let mut status_map = cell.borrow_mut();
+                                  if let Some(status) = status_map.get_mut(&id) {
+                                      match status {
+                                          &mut WebViewStatus::Initialized => {
+                                              *status = WebViewStatus::WindowCreated;
+                                              STACK_MAP.with(|cell| {
+
+                                        let mut stack_map = cell.borrow_mut();
+                                        if let Some(stack) = stack_map.get_mut(&id) {
+                                            stack.push(Event::WindowCreated);
+                                        } else {
+                                            panic!("Could not find stack with id {} to push onto stack", id);
+                                        }
+                                    });
+                                          }
+                                          _ => {}
+                                      };
+                                  }
+                              });
+                          }
+                      });
+
+                      // add our event inside our stack to be pulled by the next step
+                      STACK_MAP.with(|cell| {
+                          let mut stack_map = cell.borrow_mut();
+                          if let Some(stack) = stack_map.get_mut(&id) {
+                              let wry_event = Event::from(event);
+                              match wry_event {
+                                  Event::Undefined => {}
+                                  _ => {
+                                      stack.push(wry_event);
+                                  }
+                              };
+                          } else {
+                              panic!("Could not find stack with id {} to push onto stack", id);
+                          }
+                      });
+                  });
+              });
+
+              Ok(json!(should_stop_loop))
+            }));
+
+        worker.js_runtime.register_op("wry_new", json_op_sync(move |_state, json: Value, _zero_copy| {
+              let url = json["url"].as_str().unwrap();
+              let root_entry_point = root_entry_point.clone();
+              let root_path = root_path.clone();
+
+              println!("{}", url);
+
+              let mut id = 0;
+              INDEX.with(|cell| {
+                  id = cell.replace_with(|&mut i| i + 1);
+              });
+
+              WEBVIEW_MAP.with(|cell| {
+                  let mut webviews = cell.borrow_mut();
+                  EVENT_LOOP.with(|cell| {
+                      let event_loop = cell.borrow();
+                      let window = Window::new(&event_loop)?;
+
+                      let webview = WebViewBuilder::new(window)
+                          .unwrap()
+                          // inject a DOMContentLoaded listener to send a RPC request
+                          .initialize_script("function __rpcDomContentLoaded() {rpc.call(\"domContentLoaded\", null);};window.addEventListener(\"DOMContentLoaded\", function () {__rpcDomContentLoaded();});")
+                          .load_url(format!("wry://{}", url).as_str())?
+                          .set_rpc_handler(Box::new(move |req: RpcRequest| {
+                            // this is a sample RPC test to check if we can get everything to work together
+                            let response = None;
+                            if &req.method == "domContentLoaded" {
+                              STACK_MAP.with(|cell| {
+
+                                let mut stack_map = cell.borrow_mut();
+                                if let Some(stack) = stack_map.get_mut(&id) {
+                                    stack.push(Event::DomContentLoaded);
+                                } else {
+                                    panic!("Could not find stack with id {} to push onto stack", id);
+                                }
+                            });
+                            }
+                            response
+                          }))
+                          .register_protocol("wry".into(), Box::new(move |a: &str| {
+                            load_local_file(
+                                &a.replace("wry://", ""),
+                                root_entry_point.file_name().unwrap().to_str().unwrap(),
+                                root_path.clone(),
+                            )
+                            .map_err(|_| wry::Error::InitScriptError)
+                        }))
+                          .build()?;
+
+                      webviews.insert(id, webview);
+                      STACK_MAP.with(|cell| {
+                          cell.borrow_mut().insert(id, Vec::new());
+                      });
+
+                      // Set status to Initialized
+                      // on next loop we will mark this as window created
+                      WEBVIEW_STATUS.with(|cell| {
+                        cell.borrow_mut().insert(id, WebViewStatus::Initialized);
+                      });
+
+                      Ok(json!(id))
+                  })
+              })
+            }));
+
+        worker.bootstrap(&options);
+        worker.execute_module(&main_module).await?;
+        worker.run_event_loop().await?;
 
         return Ok(());
     } else if let Some(build_matches) = matches.subcommand_matches("compile") {
         // we should have a path like
         // ./examples/project1/src/index.html
-        let root_entry_point =
-            std::path::PathBuf::from(build_matches.value_of("html-file").unwrap());
-
+        let root_entry_point = std::path::PathBuf::from(build_matches.value_of("js-file").unwrap());
         // our project path source should be
         // ./examples/project1/src/
         let root_path = std::fs::canonicalize(root_entry_point.parent().unwrap())?;

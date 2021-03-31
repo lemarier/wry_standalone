@@ -1,4 +1,4 @@
-name: updater test artifacts
+name: build artifacts
 on: push
 
 jobs:
@@ -16,6 +16,30 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
+      - name: Log versions
+        run: |
+          rustc --version
+          cargo --version
+      - name: Cache cargo registry
+        uses: actions/cache@v1
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+      - name: Cache cargo index
+        uses: actions/cache@v1
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+      - name: Cache cargo build
+        uses: actions/cache@v1
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+      - name: Remove Some Cache
+        if: matrix.os == 'windows-latest'
+        run: |
+          rm target/release/gn_root -Recurse -ErrorAction Ignore
+          rm target/debug/gn_root -Recurse -ErrorAction Ignore
       - name: install webkit2gtk (ubuntu only)
         if: matrix.platform == 'ubuntu-latest'
         run: |
@@ -25,17 +49,26 @@ jobs:
       - uses: actions/upload-artifact@v2
         if: matrix.platform == 'ubuntu-latest'
         with:
-          name: linux-updater-artifacts
+          name: linux-artifacts
           path: ./target/release/wry
-
       - uses: actions/upload-artifact@v2
         if: matrix.platform == 'windows-latest'
         with:
-          name: windows-updater-artifacts
+          name: windows-artifacts
           path: ./target/release/wry.exe
-
       - uses: actions/upload-artifact@v2
         if: matrix.platform == 'macos-latest'
         with:
-          name: macos-updater-artifacts
+          name: macos-artifacts
           path: ./target/release/wry
+
+      - name: Release for test
+        uses: softprops/action-gh-release@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: "wry_standalone release"
+          draft: true
+          files: |
+            ./target/release/wry.exe
+            ./target/release/wry

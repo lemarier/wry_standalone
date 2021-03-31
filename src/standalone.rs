@@ -143,7 +143,6 @@ pub fn extract_standalone() -> crate::Result<Option<(Metadata, EmbeddedAssets)>>
     let metadata = read_string_slice(&mut current_exe, metadata_pos, metadata_len)
         .context("Failed to read metadata from the current executable")?;
 
-
     let metadata: Metadata = serde_json::from_str(&metadata).unwrap();
     let assets: EmbeddedAssets = serde_json::from_str(&bundle).unwrap();
 
