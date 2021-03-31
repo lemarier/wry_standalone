@@ -48,7 +48,7 @@ jobs:
           cd target/release
           zip -r wry-x86_64-apple-darwin.zip wry
       - name: Pre-release (windows)
-        if: matrix.platform == 'windows-latest'
+        if: matrix.platform == 'windows-2019'
         run: |
           Compress-Archive -CompressionLevel Optimal -Force -Path target/release/wry.exe -DestinationPath target/release/wry-x86_64-pc-windows-msvc.zip
       - uses: actions/upload-artifact@v2
@@ -57,7 +57,7 @@ jobs:
           name: linux-artifacts
           path: ./target/release/wry
       - uses: actions/upload-artifact@v2
-        if: matrix.platform == 'windows-latest'
+        if: matrix.platform == 'windows-2019'
         with:
           name: windows-artifacts
           path: ./target/release/wry.exe

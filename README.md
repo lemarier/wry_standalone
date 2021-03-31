@@ -18,13 +18,13 @@ iwr https://raw.githubusercontent.com/lemarier/wry_standalone/main/install/insta
 ```bash
 git clone https://github.com/lemarier/wry_demo.git
 cd wry_demo
-wry run ./main.js
+wry run ./src/main.js
 ```
 
 ### Create self contained binary
 For test purpose it shuld generate a self contained binary as `compiled-bin-test` in the current directory.
 ```bash
-wry compile ./main.js
+wry compile ./src/main.js
 ```
 
 #### Run the self contained binary

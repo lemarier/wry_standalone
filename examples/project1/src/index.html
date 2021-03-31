@@ -10,25 +10,9 @@
     <script>
       const test = [1,2,3].filter(n => n > 1);
       console.log(test);
-    </script>
-    <script>
-      let fullscreen = false;
-      async function toggleFullScreen() {
-          await rpc.call('fullscreen', !fullscreen);
-          fullscreen = !fullscreen;
-      }
-      async function getAsyncRpcResult() {
-          const reply = await rpc.call('send-parameters', {'message': 'WRY'});
-          const result = document.getElementById('rpc-result');
-          result.innerText = reply;
-      }
-      </script>
-      
+    </script>      
     <h1>Welcome to Wry Standalone!</h1>
     <a href="test.html">goto test</a>
     <img src="./img.jpg" />
-    <div><button onclick="toggleFullScreen();">Toggle fullscreen</button></div>
-      <div><button onclick="getAsyncRpcResult();">Send parameters</button></div>
-      <div id="rpc-result"></div>
   </body>
 </html>

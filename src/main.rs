@@ -109,8 +109,8 @@ async fn main() -> Result<()> {
         let options = WorkerOptions {
             apply_source_maps: false,
             args: vec![],
-            debug_flag: false,
-            unstable: false,
+            debug_flag: true,
+            unstable: true,
             ca_data: None,
             user_agent: "hello_runtime".to_string(),
             seed: None,
@@ -247,7 +247,14 @@ async fn main() -> Result<()> {
                       let webview = WebViewBuilder::new(window)
                           .unwrap()
                           // inject a DOMContentLoaded listener to send a RPC request
-                          .initialize_script("function __rpcDomContentLoaded() {rpc.call(\"domContentLoaded\", null);};window.addEventListener(\"DOMContentLoaded\", function () {__rpcDomContentLoaded();});")
+                          .initialize_script(
+                            format!(
+                              r#"
+                                {dom_loader}
+                              "#,
+                              dom_loader = include_str!("scripts/dom_loader.js"),
+                            ).as_str()
+                          )
                           .load_url(format!("wry://{}", url).as_str())?
                           .set_rpc_handler(Box::new(move |req: RpcRequest| {
                             // this is a sample RPC test to check if we can get everything to work together
@@ -290,6 +297,11 @@ async fn main() -> Result<()> {
                   })
               })
             }));
+
+        // inject webview
+        worker
+            .js_runtime
+            .execute("<webview>", include_str!("scripts/webview.js"))?;
 
         worker.bootstrap(&options);
         worker.execute_module(&main_module).await?;
