@@ -663,16 +663,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "deno_json_op"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f1e1d5bba7a8fb46d573a8ac66de5ed0f30ea19801c42c1b1905712b0997537"
-dependencies = [
- "quote 1.0.9",
- "syn 1.0.64",
-]
-
-[[package]]
 name = "deno_runtime"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3915,7 +3905,6 @@ dependencies = [
  "anyhow",
  "clap",
  "deno_core",
- "deno_json_op",
  "deno_runtime",
  "serde",
  "serde_json",
