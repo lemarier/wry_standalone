@@ -20,6 +20,18 @@ jobs:
         run: |
           rustc --version
           cargo --version
+      - name: Install Python
+        uses: actions/setup-python@v1
+        with:
+          python-version: "3.8"
+          architecture: x64
+      - name: Remove unused versions of Python
+        if: startsWith(matrix.os, 'windows')
+        run: |-
+          $env:PATH -split ";" |
+            Where-Object { Test-Path "$_\python.exe" } |
+            Select-Object -Skip 1 |
+            ForEach-Object { Move-Item "$_" "$_.disabled" }
       - name: Cache cargo registry
         uses: actions/cache@v1
         with:
@@ -45,7 +57,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y webkit2gtk-4.0
-      - run: cargo build --release
+      - run: cargo build --release --locked --all-targets -vv
       - uses: actions/upload-artifact@v2
         if: matrix.platform == 'ubuntu-latest'
         with:

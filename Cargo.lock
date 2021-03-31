@@ -289,12 +289,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cargo_gn"
-version = "0.0.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5ba7d7f7b201dfcbc314b14f2176c92f8ba521dab538b40e426ffed25ed7cd80"
-
-[[package]]
 name = "cc"
 version = "1.0.67"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -620,27 +614,7 @@ version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e7b158b7974814c67599e71592595a994df03431b8b2dd65efe7b4c94a298085"
 dependencies = [
- "deno_core 0.82.0",
-]
-
-[[package]]
-name = "deno_core"
-version = "0.77.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5ea6b5f04b9336050413741233eef45f01379ae7ac2ca88ff2ee1bb21081a131"
-dependencies = [
- "anyhow",
- "futures",
- "indexmap",
- "lazy_static",
- "libc",
- "log",
- "pin-project",
- "rusty_v8 0.16.0",
- "serde",
- "serde_json",
- "smallvec",
- "url",
+ "deno_core",
 ]
 
 [[package]]
@@ -656,7 +630,7 @@ dependencies = [
  "libc",
  "log",
  "pin-project",
- "rusty_v8 0.21.0",
+ "rusty_v8",
  "serde",
  "serde_json",
  "smallvec",
@@ -669,7 +643,7 @@ version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f7a68fa3bb966f5bda6b25d1517f31082fa8b7d451b65704e9fbf50a30eef4e9"
 dependencies = [
- "deno_core 0.82.0",
+ "deno_core",
  "rand 0.8.3",
 ]
 
@@ -680,7 +654,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f2ba67b566757af97acb5eb41ea94d7ac2566be3889c2d1f08cf73ee3c815f66"
 dependencies = [
  "bytes",
- "deno_core 0.82.0",
+ "deno_core",
  "reqwest",
  "serde",
  "tokio",
@@ -706,7 +680,7 @@ checksum = "e504e402f26181d42ec0ef20706f10b9bb2ffa474461e845747b93006cdea6b9"
 dependencies = [
  "atty",
  "deno_console",
- "deno_core 0.82.0",
+ "deno_core",
  "deno_crypto",
  "deno_fetch",
  "deno_url",
@@ -749,7 +723,7 @@ version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b2322bc2f967d7d738044e1ca0217ff165d406336a6aa9c57d503bbe8598a3df"
 dependencies = [
- "deno_core 0.82.0",
+ "deno_core",
  "idna",
  "serde",
 ]
@@ -760,7 +734,7 @@ version = "0.32.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "23966eb9c65be723072697ebbb07acf4cf3f1af3cfd0557f0612850baf7a4f1c"
 dependencies = [
- "deno_core 0.82.0",
+ "deno_core",
 ]
 
 [[package]]
@@ -769,7 +743,7 @@ version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "61366605e8c2c3eb89900dbb04734fd9e35debb31402529627982d636f2863cc"
 dependencies = [
- "deno_core 0.82.0",
+ "deno_core",
  "serde",
  "tokio",
  "wgpu-core",
@@ -782,7 +756,7 @@ version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6bd0857d86b3909f8c6e99641ec4127e1b6ad9a5746cdf63a51d97c480f8d584"
 dependencies = [
- "deno_core 0.82.0",
+ "deno_core",
 ]
 
 [[package]]
@@ -791,7 +765,7 @@ version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7340fead7d3bc4928d5441ea08f112316208bb64f99f7ef8e277871cddd8a2d2"
 dependencies = [
- "deno_core 0.82.0",
+ "deno_core",
  "http",
  "serde",
  "tokio",
@@ -2893,20 +2867,6 @@ dependencies = [
 
 [[package]]
 name = "rusty_v8"
-version = "0.16.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a50f63f3030b5a676b9f6e7d53bf1f880904973c2350a3f034dbf82facca0b4f"
-dependencies = [
- "bitflags",
- "cargo_gn",
- "fslock",
- "lazy_static",
- "libc",
- "which",
-]
-
-[[package]]
-name = "rusty_v8"
 version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "44bcf83fc222cc6caf4404414eae397c910e2f1ee31f291024434ae5cc312918"
@@ -2990,15 +2950,6 @@ dependencies = [
  "indexmap",
  "itoa",
  "ryu",
- "serde",
-]
-
-[[package]]
-name = "serde_millis"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e6e2dc780ca5ee2c369d1d01d100270203c4ff923d2a4264812d723766434d00"
-dependencies = [
  "serde",
 ]
 
@@ -4003,7 +3954,6 @@ dependencies = [
  "parking_lot",
  "percent-encoding",
  "raw-window-handle",
- "serde",
  "smithay-client-toolkit",
  "wayland-client",
  "winapi 0.3.9",
@@ -4082,7 +4032,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
- "deno_core 0.82.0",
+ "deno_core",
  "deno_json_op",
  "deno_runtime",
  "phf",
@@ -4093,21 +4043,7 @@ dependencies = [
  "walkdir",
  "winit",
  "wry",
- "wry_deno",
  "zstd",
-]
-
-[[package]]
-name = "wry_deno"
-version = "0.1.1"
-source = "git+https://github.com/lemarier/wry_deno.git?branch=main#ed10e912b280897a4e69261070edceffdccfe9ce"
-dependencies = [
- "deno_core 0.77.1",
- "deno_json_op",
- "serde",
- "serde_millis",
- "winit",
- "wry",
 ]
 
 [[package]]

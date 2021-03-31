@@ -18,7 +18,6 @@ deno_core = "0.82"
 deno_runtime = "0.10"
 tokio = { version = "1.4.0", features = ["full"] }
 winit = "0.24.0"
-wry_deno = { git = "https://github.com/lemarier/wry_deno.git", branch = "main" }
 deno_json_op = "0.1.1"
 
 
