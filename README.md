@@ -6,12 +6,12 @@ This is an attempt to bring WRY/Tauri to a standalone compiled binary allowing y
 
 ### Shell (Mac, Linux):
 ```bash
-curl -fsSL https://raw.githubusercontent.com/lemarier/wry_standalone/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/lemarier/wry_standalone/main/install/install.sh | sh
 ```
 
 ### PowerShell (Windows):
 ```bash
-iwr https://raw.githubusercontent.com/lemarier/wry_standalone/main/scripts/install.ps1 -useb | iex
+iwr https://raw.githubusercontent.com/lemarier/wry_standalone/main/install/install.ps1 -useb | iex
 ```
 
 ### Clone sample repo
