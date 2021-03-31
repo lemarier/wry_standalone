@@ -19,8 +19,6 @@ iwr https://raw.githubusercontent.com/lemarier/wry_standalone/main/scripts/insta
 git clone https://github.com/lemarier/wry_demo.git
 cd wry_demo
 wry run ./main.js
-wry compile ./main.js
-ls -lah compiled-bin-test
 ```
 
 ### Create self contained binary
