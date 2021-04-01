@@ -16,4 +16,4 @@ webview.run(({event}) => {
        console.log("It works! domContentLoaded")
        break;
      }
- });
+ }, 16);

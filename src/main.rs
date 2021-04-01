@@ -32,9 +32,15 @@ use serde_json::json;
 use event::Event;
 use helpers::WebViewStatus;
 
+use gio::{ApplicationExt as GioApplicationExt, Cancellable};
+use gtk::{Application as GtkApp, GtkWindowExt, Inhibit, WidgetExt};
+
 thread_local! {
   static INDEX: RefCell<u64> = RefCell::new(0);
+  #[cfg(not(target_os = "linux"))]
   static EVENT_LOOP: RefCell<EventLoop<()>> = RefCell::new(EventLoop::new());
+  #[cfg(target_os = "linux")]
+  static GTK_APPLICATION: RefCell<gtk::Application> = RefCell::new(GtkApp::new(None, Default::default()).unwrap());
   static WEBVIEW_MAP: RefCell<HashMap<u64, WebView>> = RefCell::new(HashMap::new());
   static WEBVIEW_STATUS: RefCell<HashMap<u64, WebViewStatus>> = RefCell::new(HashMap::new());
   static STACK_MAP: RefCell<HashMap<u64, Vec<event::Event>>> = RefCell::new(HashMap::new());
@@ -136,6 +142,7 @@ async fn main() -> Result<()> {
             "wry_step",
             json_op_sync(move |_state, json: Value, _zero_copy| {
                 let id = json["id"].as_u64().unwrap();
+                println!("STEP");
                 STACK_MAP.with(|cell| {
                     let mut stack_map = cell.borrow_mut();
                     if let Some(stack) = stack_map.get_mut(&id) {
@@ -152,6 +159,15 @@ async fn main() -> Result<()> {
         worker.js_runtime.register_op("wry_loop", json_op_sync(move |_state, json: Value, _zero_copy| {
               let id = json["id"].as_u64().unwrap();
               let mut should_stop_loop = false;
+
+              #[cfg(target_os = "linux")]
+              {
+
+                should_stop_loop = gtk::main_iteration_do(false) == false;
+
+            }
+
+              #[cfg(not(target_os = "linux"))]
               EVENT_LOOP.with(|cell| {
                   let event_loop = &mut *cell.borrow_mut();
                   event_loop.run_return(|event, _, control_flow| {
@@ -175,7 +191,9 @@ async fn main() -> Result<()> {
                                       webview.resize().unwrap();
                                   }
                                   winit::event::Event::MainEventsCleared => {
+                                      #[cfg(not(target_os = "linux"))]
                                       webview.window().request_redraw();
+
                                   }
                                   winit::event::Event::RedrawRequested(_) => {}
                                   _ => (),
@@ -240,10 +258,74 @@ async fn main() -> Result<()> {
 
               WEBVIEW_MAP.with(|cell| {
                   let mut webviews = cell.borrow_mut();
+
+                  #[cfg(target_os = "linux")]
+                  return GTK_APPLICATION.with(|cell| {
+                    let app = cell.borrow();
+                    let cancellable: Option<&Cancellable> = None;
+                    app.register(cancellable)?;
+                    let window = gtk::ApplicationWindow::new(&app.clone());
+                    window.set_default_size(320, 200);
+                    window.set_title("Basic example");
+                    window.show_all();
+                    let webview = WebViewBuilder::new(window)
+                          .unwrap()
+                          // inject a DOMContentLoaded listener to send a RPC request
+                          .initialize_script(
+                            format!(
+                              r#"
+                                {dom_loader}
+                              "#,
+                              dom_loader = include_str!("scripts/dom_loader.js"),
+                            ).as_str()
+                          )
+                          .load_url(format!("wry://{}", url).as_str())?
+                          .set_rpc_handler(Box::new(move |req: RpcRequest| {
+                            // this is a sample RPC test to check if we can get everything to work together
+                            let response = None;
+                            if &req.method == "domContentLoaded" {
+                              STACK_MAP.with(|cell| {
+
+                                let mut stack_map = cell.borrow_mut();
+                                if let Some(stack) = stack_map.get_mut(&id) {
+                                    stack.push(Event::DomContentLoaded);
+                                } else {
+                                    panic!("Could not find stack with id {} to push onto stack", id);
+                                }
+                            });
+                            }
+                            response
+                          }))
+                          .register_protocol("wry".into(), Box::new(move |a: &str| {
+                            load_local_file(
+                                &a.replace("wry://", ""),
+                                root_entry_point.file_name().unwrap().to_str().unwrap(),
+                                root_path.clone(),
+                            )
+                            .map_err(|_| wry::Error::InitScriptError)
+                        }))
+                          .build()?;
+
+                      webviews.insert(id, webview);
+                      STACK_MAP.with(|cell| {
+                          cell.borrow_mut().insert(id, Vec::new());
+                      });
+
+                      // Set status to Initialized
+                      // on next loop we will mark this as window created
+                      WEBVIEW_STATUS.with(|cell| {
+                        cell.borrow_mut().insert(id, WebViewStatus::Initialized);
+                      });
+
+                      println!("webview created");
+
+                    Ok(json!(id))
+                  });
+
+                  #[cfg(not(target_os = "linux"))]
                   EVENT_LOOP.with(|cell| {
                       let event_loop = cell.borrow();
                       let window = Window::new(&event_loop)?;
-
                       let webview = WebViewBuilder::new(window)
                           .unwrap()
                           // inject a DOMContentLoaded listener to send a RPC request

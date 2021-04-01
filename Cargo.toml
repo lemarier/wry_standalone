@@ -19,6 +19,10 @@ tokio = { version = "1.4.0", features = ["full"] }
 winit = "0.24.0"
 deno_json_op = "0.1.1"
 
+[target."cfg(target_os = \"linux\")".dependencies]
+webkit2gtk = { version = "0.11", features = [ "v2_8" ] }
+gtk = "0.9"
+gio = "0.9"
 
 [[bin]]
 name = "wry"
