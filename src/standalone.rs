@@ -12,7 +12,20 @@ use std::io::SeekFrom;
 use std::io::Write;
 use wry::{Application, Attributes, CustomProtocol};
 
+use deno_core::error::type_error;
+use deno_core::error::AnyError;
+use deno_core::futures::FutureExt;
+use deno_core::resolve_url;
+use deno_core::ModuleLoader;
+use deno_core::ModuleSpecifier;
+use deno_core::OpState;
+
+use std::cell::RefCell;
+use std::pin::Pin;
+use std::rc::Rc;
+
 use crate::embed_assets::{Assets, EmbeddedAssets};
+pub struct EmbeddedModuleLoader(pub String);
 
 #[derive(Deserialize, Serialize)]
 pub struct Metadata {}
@@ -149,39 +162,10 @@ pub fn extract_standalone() -> crate::Result<Option<(Metadata, EmbeddedAssets)>>
     Ok(Some((metadata, assets)))
 }
 
-pub fn run(assets: EmbeddedAssets, metadata: Metadata) -> crate::Result<()> {
+pub async fn run(assets: EmbeddedAssets, metadata: Metadata) -> crate::Result<()> {
     //println!("SOURCE: {}", source_code);
-    let entry_point_file = "index.html";
-    // launch in standalone mode with custom resolver with our embed assets
-    let mut app = Application::new()?;
-
-    fn load_local_file(
-        file: &str,
-        root_file_name: &str,
-        assets: &EmbeddedAssets,
-    ) -> crate::Result<Vec<u8>> {
-        let trimed_file = file.replace(&format!("{}/", root_file_name), "");
-        Ok(assets.get(trimed_file.as_str()).unwrap())
-    }
-
-    let custom_protocol = CustomProtocol {
-        name: "wry".into(),
-        handler: Box::new(move |a| {
-            load_local_file(&a.replace("wry://", ""), entry_point_file, &assets)
-                .map_err(|_| wry::Error::InitScriptError)
-        }),
-    };
-
-    let attributes = Attributes {
-        url: Some(format!("wry://{}", entry_point_file)),
-        title: String::from("Hello World!"),
-        ..Default::default()
-    };
-
-    app.add_window_with_configs(attributes, None, Some(custom_protocol), None)?;
-    app.run();
-
-    Ok(())
+    let entry_point_file = "index.js";
+    crate::run_wry(entry_point_file, Some(assets)).await
 }
 
 fn get_base_binary() -> crate::Result<Vec<u8>> {
@@ -203,4 +187,47 @@ fn read_string_slice(file: &mut File, pos: u64, len: u64) -> crate::Result<Strin
     file.take(len).read_to_string(&mut string)?;
     // TODO: check amount of bytes read
     Ok(string)
+}
+
+pub const SPECIFIER: &str = "file://$wry$/bundle.js";
+
+impl ModuleLoader for EmbeddedModuleLoader {
+    fn resolve(
+        &self,
+        _op_state: Rc<RefCell<OpState>>,
+        specifier: &str,
+        _referrer: &str,
+        _is_main: bool,
+    ) -> Result<ModuleSpecifier, AnyError> {
+        if specifier != SPECIFIER {
+            return Err(type_error(
+                "Self-contained binaries don't support module loading",
+            ));
+        }
+        Ok(resolve_url(specifier)?)
+    }
+
+    fn load(
+        &self,
+        _op_state: Rc<RefCell<OpState>>,
+        module_specifier: &ModuleSpecifier,
+        _maybe_referrer: Option<ModuleSpecifier>,
+        _is_dynamic: bool,
+    ) -> Pin<Box<deno_core::ModuleSourceFuture>> {
+        let module_specifier = module_specifier.clone();
+        let code = self.0.to_string();
+        async move {
+            if module_specifier.to_string() != SPECIFIER {
+                return Err(type_error(
+                    "Self-contained binaries don't support module loading",
+                ));
+            }
+            Ok(deno_core::ModuleSource {
+                code,
+                module_url_specified: module_specifier.to_string(),
+                module_url_found: module_specifier.to_string(),
+            })
+        }
+        .boxed_local()
+    }
 }

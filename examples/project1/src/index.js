@@ -1,6 +1,6 @@
 console.log(`This is a console from JAVASCRIPT ! :D`);
 
-const webview = new Webview("./test.html");
+const webview = new Webview("./index.html");
 
 console.log(webview);
 

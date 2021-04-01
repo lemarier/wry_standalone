@@ -71,7 +71,7 @@ impl<P: AsRef<Path>> From<P> for AssetKey {
 /// (key, (original filepath, compressed bytes))
 type Asset = (AssetKey, (String, Vec<u8>));
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct EmbeddedAssets(HashMap<AssetKey, (String, Vec<u8>)>);
 
 /// All possible errors while reading and compressing an [`EmbeddedAssets`] directory
