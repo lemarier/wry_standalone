@@ -127,7 +127,7 @@ pub async fn run_wry(main_module_path: &str, assets: Option<EmbeddedAssets>) -> 
             main_module_pathbuf.clone().parent().unwrap(),
         )?);
         module_loader = Rc::new(FsModuleLoader);
-        main_module = resolve_url(standalone::SPECIFIER)?;
+        main_module = resolve_path(main_module_path)?;
     }
 
     fn load_local_file(
