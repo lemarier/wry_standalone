@@ -1,6 +1,6 @@
 [package]
 name = "wry-standalone"
-version = "0.1.2"
+version = "0.1.5"
 authors = ["David Lemarier <david@lemarier.ca>"]
 edition = "2018"
 
