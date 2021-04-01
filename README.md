@@ -10,7 +10,9 @@ curl -fsSL https://raw.githubusercontent.com/lemarier/wry_standalone/main/instal
 ```
 
 ### PowerShell (Windows):
+Github require TLS 1.2 (will be removed once we use our own domain)
 ```bash
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 iwr https://raw.githubusercontent.com/lemarier/wry_standalone/main/install/install.ps1 -useb | iex
 ```
 
