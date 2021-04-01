@@ -19,8 +19,8 @@ use wry::webview::{RpcRequest, WebView, WebViewBuilder};
 
 #[cfg(not(target_os = "linux"))]
 use winit::{
-    platform::run_return::EventLoopExtRunReturn,
     event_loop::{ControlFlow, EventLoop},
+    platform::run_return::EventLoopExtRunReturn,
     window::Window,
 };
 
@@ -38,7 +38,10 @@ use helpers::WebViewStatus;
 #[cfg(target_os = "linux")]
 use gio::{ApplicationExt as GioApplicationExt, Cancellable};
 #[cfg(target_os = "linux")]
-use gtk::{Application as GtkApp, ApplicationWindow, GtkWindowExt, Inhibit, WidgetExt};
+use gtk::{
+    Application as GtkApp, ApplicationWindow, GtkWindowExt, Inhibit,
+    WidgetExt,
+};
 
 thread_local! {
   static INDEX: RefCell<u64> = RefCell::new(0);
@@ -226,6 +229,32 @@ pub async fn run_wry(main_module_path: &str, assets: Option<EmbeddedAssets>) -> 
          #[cfg(target_os = "linux")]
          {
             should_stop_loop = gtk::main_iteration_do(false) == false;
+            // set this webview as WindowCreated if needed
+            WEBVIEW_MAP.with(|cell| {
+                let webview_map = cell.borrow();
+                if let Some(webview) = webview_map.get(&id) {
+                    WEBVIEW_STATUS.with(|cell| {
+                        let mut status_map = cell.borrow_mut();
+                        if let Some(status) = status_map.get_mut(&id) {
+                            match status {
+                                &mut WebViewStatus::Initialized => {
+                                    *status = WebViewStatus::WindowCreated;
+                                    STACK_MAP.with(|cell| {
+
+                            let mut stack_map = cell.borrow_mut();
+                            if let Some(stack) = stack_map.get_mut(&id) {
+                                stack.push(Event::WindowCreated);
+                            } else {
+                                panic!("Could not find stack with id {} to push onto stack", id);
+                            }
+                        });
+                                }
+                                _ => {}
+                            };
+                        }
+                    });
+                };
+            });
          }
 
          #[cfg(not(target_os = "linux"))]
@@ -337,6 +366,19 @@ pub async fn run_wry(main_module_path: &str, assets: Option<EmbeddedAssets>) -> 
                     gtk_window.set_default_size(800, 600);
                     gtk_window.set_title("Basic example");
                     gtk_window.show_all();
+
+                    gtk_window.connect_delete_event(move |_window, _event| {
+                        STACK_MAP.with(|cell| {
+                            let mut stack_map = cell.borrow_mut();
+                            if let Some(stack) = stack_map.get_mut(&id) {
+                                stack.push(Event::Close);
+                            } else {
+                                panic!("Could not find stack with id {} to push onto stack", id);
+                            }
+                        });
+                        Inhibit(false)
+                    });
+
                     // save our window
                     window = Some(gtk_window);
                 });
