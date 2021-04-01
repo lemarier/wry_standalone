@@ -17,7 +17,9 @@ use std::sync::Arc;
 use deno_core::error::anyhow;
 use wry::webview::{RpcRequest, WebView, WebViewBuilder};
 
+#[cfg(not(target_os = "linux"))]
 use winit::platform::run_return::EventLoopExtRunReturn;
+#[cfg(not(target_os = "linux"))]
 use winit::{
     event_loop::{ControlFlow, EventLoop},
     window::Window,
@@ -34,8 +36,16 @@ use embed_assets::{Assets, EmbeddedAssets};
 use event::Event;
 use helpers::WebViewStatus;
 
+#[cfg(target_os = "linux")]
+use gio::{ApplicationExt as GioApplicationExt, Cancellable};
+#[cfg(target_os = "linux")]
+use gtk::{Application as GtkApp, ApplicationWindow, GtkWindowExt, Inhibit, WidgetExt};
+
 thread_local! {
   static INDEX: RefCell<u64> = RefCell::new(0);
+  #[cfg(target_os = "linux")]
+  static GTK_APPLICATION: RefCell<gtk::Application> = RefCell::new(GtkApp::new(None, Default::default()).unwrap());
+  #[cfg(not(target_os = "linux"))]
   static EVENT_LOOP: RefCell<EventLoop<()>> = RefCell::new(EventLoop::new());
   static WEBVIEW_MAP: RefCell<HashMap<u64, WebView>> = RefCell::new(HashMap::new());
   static WEBVIEW_STATUS: RefCell<HashMap<u64, WebViewStatus>> = RefCell::new(HashMap::new());
@@ -130,6 +140,7 @@ pub async fn run_wry(main_module_path: &str, assets: Option<EmbeddedAssets>) -> 
         main_module = resolve_path(main_module_path)?;
     }
 
+    // load file from given path or from embed assets
     fn load_local_file(
         file: &str,
         root_file_name: &str,
@@ -155,10 +166,13 @@ pub async fn run_wry(main_module_path: &str, assets: Option<EmbeddedAssets>) -> 
         }
     }
 
+    // if we want to support web worker, we need to spawn js_runtime worker
+    // into a new thread with tokio
     let create_web_worker_cb = Arc::new(|_| {
         todo!("Web workers are not supported");
     });
 
+    // deno worker configuration
     let options = WorkerOptions {
         apply_source_maps: false,
         args: vec![],
@@ -209,14 +223,21 @@ pub async fn run_wry(main_module_path: &str, assets: Option<EmbeddedAssets>) -> 
     worker.js_runtime.register_op("wry_loop", json_op_sync(move |_state, json: Value, _zero_copy| {
          let id = json["id"].as_u64().unwrap();
          let mut should_stop_loop = false;
+
+         #[cfg(target_os = "linux")]
+         {
+            should_stop_loop = gtk::main_iteration_do(false) == false;
+         }
+
+         #[cfg(not(target_os = "linux"))]
          EVENT_LOOP.with(|cell| {
              let event_loop = &mut *cell.borrow_mut();
              event_loop.run_return(|event, _, control_flow| {
                  *control_flow = ControlFlow::Exit;
- 
+
                  WEBVIEW_MAP.with(|cell| {
                      let webview_map = cell.borrow();
- 
+
                      if let Some(webview) = webview_map.get(&id) {
                          match event {
                              winit::event::Event::WindowEvent {
@@ -237,7 +258,7 @@ pub async fn run_wry(main_module_path: &str, assets: Option<EmbeddedAssets>) -> 
                              winit::event::Event::RedrawRequested(_) => {}
                              _ => (),
                          };
- 
+
                          // set this webview as WindowCreated if needed
                          WEBVIEW_STATUS.with(|cell| {
                              let mut status_map = cell.borrow_mut();
@@ -246,7 +267,7 @@ pub async fn run_wry(main_module_path: &str, assets: Option<EmbeddedAssets>) -> 
                                      &mut WebViewStatus::Initialized => {
                                          *status = WebViewStatus::WindowCreated;
                                          STACK_MAP.with(|cell| {
- 
+
                                    let mut stack_map = cell.borrow_mut();
                                    if let Some(stack) = stack_map.get_mut(&id) {
                                        stack.push(Event::WindowCreated);
@@ -261,7 +282,7 @@ pub async fn run_wry(main_module_path: &str, assets: Option<EmbeddedAssets>) -> 
                          });
                      }
                  });
- 
+
                  // add our event inside our stack to be pulled by the next step
                  STACK_MAP.with(|cell| {
                      let mut stack_map = cell.borrow_mut();
@@ -279,7 +300,7 @@ pub async fn run_wry(main_module_path: &str, assets: Option<EmbeddedAssets>) -> 
                  });
              });
          });
- 
+
          Ok(json!(should_stop_loop))
        }));
 
@@ -298,70 +319,91 @@ pub async fn run_wry(main_module_path: &str, assets: Option<EmbeddedAssets>) -> 
                 id = cell.replace_with(|&mut i| i + 1);
             });
 
-            WEBVIEW_MAP.with(|cell| {
+            return WEBVIEW_MAP.with(|cell| {
                 let mut webviews = cell.borrow_mut();
+
+                #[cfg(target_os = "linux")]
+                let mut window: Option<ApplicationWindow> = None;
+
+                #[cfg(not(target_os = "linux"))]
+                let mut window: Option<Window> = None;
+
+                #[cfg(target_os = "linux")]
+                GTK_APPLICATION.with(|cell| {
+                    let app = cell.borrow();
+                    let cancellable: Option<&Cancellable> = None;
+                    app.register(cancellable)
+                        .expect("Unable to register window");
+                    window = Some(ApplicationWindow::new(&app.clone()));
+                    window.set_default_size(800, 600);
+                    window.set_title("Basic example");
+                    window.show_all();
+                });
+
+                #[cfg(not(target_os = "linux"))]
                 EVENT_LOOP.with(|cell| {
                     let event_loop = cell.borrow();
-                    let window = Window::new(&event_loop)?;
+                    window = Some(Window::new(&event_loop).expect("Unable to create window"));
+                });
 
-                    let webview =
-                        WebViewBuilder::new(window)
-                            .unwrap()
-                            // inject a DOMContentLoaded listener to send a RPC request
-                            .initialize_script(
-                                format!(
-                                    r#"
-                           {dom_loader}
-                         "#,
-                                    dom_loader = include_str!("scripts/dom_loader.js"),
-                                )
-                                .as_str(),
-                            )
-                            .load_url(format!("wry://{}", url).as_str())?
-                            .set_rpc_handler(Box::new(move |req: RpcRequest| {
-                                // this is a sample RPC test to check if we can get everything to work together
-                                let response = None;
-                                if &req.method == "domContentLoaded" {
-                                    STACK_MAP.with(|cell| {
- 
-                           let mut stack_map = cell.borrow_mut();
-                           if let Some(stack) = stack_map.get_mut(&id) {
-                               stack.push(Event::DomContentLoaded);
-                           } else {
-                               panic!("Could not find stack with id {} to push onto stack", id);
-                           }
-                       });
+                let webview = WebViewBuilder::new(window.expect("Window not created"))
+                    .unwrap()
+                    // inject a DOMContentLoaded listener to send a RPC request
+                    .initialize_script(
+                        format!(
+                            r#"
+                                {dom_loader}
+                            "#,
+                            dom_loader = include_str!("scripts/dom_loader.js"),
+                        )
+                        .as_str(),
+                    )
+                    .load_url(format!("wry://{}", url).as_str())?
+                    .set_rpc_handler(Box::new(move |req: RpcRequest| {
+                        // this is a sample RPC test to check if we can get everything to work together
+                        let response = None;
+                        if &req.method == "domContentLoaded" {
+                            STACK_MAP.with(|cell| {
+                                let mut stack_map = cell.borrow_mut();
+                                if let Some(stack) = stack_map.get_mut(&id) {
+                                    stack.push(Event::DomContentLoaded);
+                                } else {
+                                    panic!(
+                                        "Could not find stack with id {} to push onto stack",
+                                        id
+                                    );
                                 }
-                                response
-                            }))
-                            .register_protocol(
-                                "wry".into(),
-                                Box::new(move |a: &str| {
-                                    load_local_file(
-                                        &a.replace("wry://", ""),
-                                        root_entry_point.file_name().unwrap().to_str().unwrap(),
-                                        root_path.clone(),
-                                        assets.clone(),
-                                    )
-                                    .map_err(|_| wry::Error::InitScriptError)
-                                }),
+                            });
+                        }
+                        response
+                    }))
+                    .register_protocol(
+                        "wry".into(),
+                        Box::new(move |a: &str| {
+                            load_local_file(
+                                &a.replace("wry://", ""),
+                                root_entry_point.file_name().unwrap().to_str().unwrap(),
+                                root_path.clone(),
+                                assets.clone(),
                             )
-                            .build()?;
+                            .map_err(|_| wry::Error::InitScriptError)
+                        }),
+                    )
+                    .build()?;
 
-                    webviews.insert(id, webview);
-                    STACK_MAP.with(|cell| {
-                        cell.borrow_mut().insert(id, Vec::new());
-                    });
+                webviews.insert(id, webview);
+                STACK_MAP.with(|cell| {
+                    cell.borrow_mut().insert(id, Vec::new());
+                });
 
-                    // Set status to Initialized
-                    // on next loop we will mark this as window created
-                    WEBVIEW_STATUS.with(|cell| {
-                        cell.borrow_mut().insert(id, WebViewStatus::Initialized);
-                    });
+                // Set status to Initialized
+                // on next loop we will mark this as window created
+                WEBVIEW_STATUS.with(|cell| {
+                    cell.borrow_mut().insert(id, WebViewStatus::Initialized);
+                });
 
-                    Ok(json!(id))
-                })
-            })
+                Ok(json!(id))
+            });
         }),
     );
 
