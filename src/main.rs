@@ -38,10 +38,7 @@ use helpers::WebViewStatus;
 #[cfg(target_os = "linux")]
 use gio::{ApplicationExt as GioApplicationExt, Cancellable};
 #[cfg(target_os = "linux")]
-use gtk::{
-    Application as GtkApp, ApplicationWindow, GtkWindowExt, Inhibit,
-    WidgetExt,
-};
+use gtk::{Application as GtkApp, ApplicationWindow, GtkWindowExt, Inhibit, WidgetExt};
 
 thread_local! {
   static INDEX: RefCell<u64> = RefCell::new(0);
@@ -143,7 +140,7 @@ pub async fn run_wry(main_module_path: &str, assets: Option<EmbeddedAssets>) -> 
     }
 
     // load file from given path or from embed assets
-    fn load_local_file(
+    fn file_resolver(
         file: &str,
         root_file_name: &str,
         root: Option<std::path::PathBuf>,
@@ -158,7 +155,10 @@ pub async fn run_wry(main_module_path: &str, assets: Option<EmbeddedAssets>) -> 
             let trimed_file = file_name.replace(&format!("{}/", root_file_name), "");
             Ok(assets.get(trimed_file.as_str()).unwrap())
         } else {
-            let trimed_file = file.replace(&format!("{}/", root_file_name), "");
+            let mut trimed_file = file.replace(&format!("{}/", root_file_name), "");
+            if trimed_file.starts_with("./") {
+                trimed_file = trimed_file.replace("./", "");
+            }
             let mut file = std::fs::File::open(std::fs::canonicalize(
                 root.expect("No root path found").join(trimed_file),
             )?)?;
@@ -423,7 +423,7 @@ pub async fn run_wry(main_module_path: &str, assets: Option<EmbeddedAssets>) -> 
                     .register_protocol(
                         "wry".into(),
                         Box::new(move |a: &str| {
-                            load_local_file(
+                            file_resolver(
                                 &a.replace("wry://", ""),
                                 root_entry_point.file_name().unwrap().to_str().unwrap(),
                                 root_path.clone(),
