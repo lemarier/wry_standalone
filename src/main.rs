@@ -18,9 +18,8 @@ use deno_core::error::anyhow;
 use wry::webview::{RpcRequest, WebView, WebViewBuilder};
 
 #[cfg(not(target_os = "linux"))]
-use winit::platform::run_return::EventLoopExtRunReturn;
-#[cfg(not(target_os = "linux"))]
 use winit::{
+    platform::run_return::EventLoopExtRunReturn,
     event_loop::{ControlFlow, EventLoop},
     window::Window,
 };
@@ -334,10 +333,12 @@ pub async fn run_wry(main_module_path: &str, assets: Option<EmbeddedAssets>) -> 
                     let cancellable: Option<&Cancellable> = None;
                     app.register(cancellable)
                         .expect("Unable to register window");
-                    window = Some(ApplicationWindow::new(&app.clone()));
-                    window.set_default_size(800, 600);
-                    window.set_title("Basic example");
-                    window.show_all();
+                    let gtk_window = ApplicationWindow::new(&app.clone());
+                    gtk_window.set_default_size(800, 600);
+                    gtk_window.set_title("Basic example");
+                    gtk_window.show_all();
+                    // save our window
+                    window = Some(gtk_window);
                 });
 
                 #[cfg(not(target_os = "linux"))]
